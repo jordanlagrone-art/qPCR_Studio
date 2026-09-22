@@ -1,0 +1,47 @@
+  function invalidate(){
+    state.analysisRun=false;
+    state.results=[];
+    $('#statsResult').textContent='Data changed. Run a new statistical test after analysis.';
+    $('#staleNotice').classList.toggle('hidden',!state.raw.length);
+  }
+  function toast(message){
+    $('#toast').textContent=message; $('#toast').classList.add('visible');
+    clearTimeout(window.toastTimer); window.toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),3500);
+  }
+  function renderColors(){
+    $('#colorSwatches').innerHTML=colors.map((c,i)=>`<label title="Series color ${i+1}"><input type="color" aria-label="Series color ${i+1}" value="${c}" data-color="${i}"><span>${i+1}</span></label>`).join('');
+    $$('[data-color]').forEach(el=>el.oninput=()=>{colors[Number(el.dataset.color)]=el.value;$('#palettePreset').value='custom';drawChart();});
+  }
+  const figureIds=['palettePreset','pointSize','barOpacity','showGrid','graphMode','graphMetric','graphType','errorType','yScale','graphTitle','showThreshold','thresholdValue','thresholdLabel'];
+  function getFigure(){return {colors,genes:graphGenes(),controls:Object.fromEntries(figureIds.map(id=>[id,$('#'+id).type==='checkbox'?$('#'+id).checked:$('#'+id).value]))};}
+  function restoreFigure(f){if(!f)return;if(Array.isArray(f.genes))state.pendingGraphGenes=f.genes;if(Array.isArray(f.colors)&&f.colors.length===8&&f.colors.every(c=>/^#[0-9a-f]{6}$/i.test(c)))colors=f.colors;for(const id of figureIds){if(f.controls&&id in f.controls){const el=$('#'+id);if(el.type==='checkbox')el.checked=!!f.controls[id];else el.value=f.controls[id];}}renderColors();}
+  function validateProject(p){
+    if(!p||!Array.isArray(p.raw)||!Array.isArray(p.trials)||!Array.isArray(p.selectedGenes))throw new Error('This is not a qPCR studio project.');
+    if(!p.trials.every(t=>typeof t.id==='string'&&/^[\w-]+$/.test(t.id)&&typeof t.name==='string'))throw new Error('Invalid trial records.');
+    if(!p.raw.every(r=>typeof r.id==='string'&&/^[\w-]+$/.test(r.id)&&typeof r.sample==='string'&&typeof r.target==='string'&&Number.isFinite(r.cq)&&p.trials.some(t=>t.id===r.trialId)))throw new Error('Invalid raw data records.');
+    if(p.base!==undefined&&(!Number.isFinite(p.base)||p.base<=1))throw new Error('Invalid amplification base.');
+  }
+  $('#palettePreset').onchange=()=>{if(palettes[$('#palettePreset').value])colors=[...palettes[$('#palettePreset').value]];renderColors();drawChart();};
+  ['pointSize','barOpacity','showGrid'].forEach(id=>$('#'+id).addEventListener('input',drawChart));
+  $('#globalSave').onclick=()=>$('#saveProject').click();
+  $('#exploreDemo').onclick=()=>$('#loadDemo').click();
+  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();$('#saveProject').click();}});
+  const graphCard=$('#page-graphs .chartCard');
+  graphCard.insertAdjacentHTML('afterbegin','<div class="figure-preview-heading"><span>FIGURE PREVIEW</span><span class="badge">2× resolution export</span></div>');
+  const next=document.createElement('button');next.className='btn primary';next.textContent='Continue to analysis →';next.onclick=()=>showPage('setup');$('#page-import .topbar .actions').append(next);
+  const graphNext=document.createElement('button');graphNext.className='btn primary';graphNext.textContent='Open figure studio →';graphNext.onclick=()=>showPage('graphs');$('#page-results .topbar .actions').append(graphNext);
+  renderColors();
+  document.querySelectorAll('.field').forEach(field=>{const label=field.querySelector('label'),input=field.querySelector('input,select');if(label&&input&&input.id)label.htmlFor=input.id;});
+  function compactAxis(ctx,labels,width,count){
+    const fontSize=Math.max(8,Math.min(11,(width-150)/Math.max(1,count)*0.65));
+    ctx.font=fontSize+'px system-ui';
+    const maxWidth=160;
+    const longest=Math.min(maxWidth,Math.max(0,...labels.map(label=>ctx.measureText(label).width)));
+    return {fontSize,maxWidth,left:Math.max(72,Math.ceil(longest/Math.SQRT2)+12),bottom:Math.max(92,Math.ceil(longest/Math.SQRT2)+32)};
+  }
+  function drawAngledLabel(ctx,label,x,y,axis){
+    ctx.save();ctx.font=axis.fontSize+'px system-ui';
+    let text=label;
+    if(ctx.measureText(text).width>axis.maxWidth){while(text.length&&ctx.measureText(text+'…').width>axis.maxWidth)text=text.slice(0,-1);text+='…';}
+    ctx.translate(x,y);ctx.rotate(-Math.PI/4);ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillStyle='#445167';ctx.fillText(text,0,0);ctx.restore();
+  }

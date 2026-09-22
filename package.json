@@ -1,0 +1,43 @@
+{
+  "name": "qpcr-studio",
+  "version": "1.0.1",
+  "description": "An offline qPCR analysis and figure studio",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "build:source": "node scripts/build-source.cjs",
+    "test": "playwright test",
+    "dist": "electron-builder --win portable"
+  },
+  "keywords": [],
+  "author": "qPCR studio",
+  "license": "ISC",
+  "type": "commonjs",
+  "build": {
+    "appId": "studio.qpcr.desktop",
+    "productName": "qPCR studio",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "qPCR-studio-${version}-Windows.exe"
+    }
+  },
+  "dependencies": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3"
+  }
+}

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" /><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>qPCR Studio — ΔΔCt Analysis</title>
+<script src="../node_modules/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f7fb; --panel:#ffffff; --panel2:#f8fafc; --text:#182230; --muted:#687385;
+    --line:#dfe5ee; --primary:#3157d5; --primary2:#e9eeff; --good:#1d8a60; --warn:#b36a00;
+    --bad:#b42318; --shadow:0 8px 28px rgba(31,42,68,.08); --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  button,input,select{font:inherit}
+  button{cursor:pointer}
+  .app{min-height:100vh;display:grid;grid-template-columns:250px 1fr}
+  aside{background:#172033;color:#fff;padding:24px 18px;position:sticky;top:0;height:100vh;overflow:auto}
+  .brand{display:flex;gap:11px;align-items:center;margin-bottom:28px}.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#8aa3ff,#5be0c0);display:grid;place-items:center;color:#172033;font-weight:900}.brand h1{font-size:17px;margin:0}.brand small{color:#aebbd0}
+  .nav{display:grid;gap:8px}.nav button{border:0;background:transparent;color:#b9c4d7;text-align:left;padding:12px 13px;border-radius:10px;font-weight:650}.nav button.active{background:#26334d;color:#fff}.nav button .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#34425f;margin-right:9px;font-size:12px}.nav button.active .n{background:#7d96ff;color:#0f1830}
+  .sideNote{margin-top:28px;padding:13px;border:1px solid #35425c;border-radius:12px;color:#aebbd0;font-size:12px;line-height:1.45}.sideNote strong{color:#fff}
+  main{padding:30px 34px 50px;min-width:0}.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:22px}.topbar h2{margin:0 0 5px;font-size:26px}.topbar p{margin:0;color:var(--muted)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}.btn{border:1px solid var(--line);background:#fff;color:var(--text);padding:9px 13px;border-radius:9px;font-weight:650}.btn:hover{background:#f8fafc}.btn.primary{background:var(--primary);color:#fff;border-color:var(--primary)}.btn.danger{color:var(--bad)}.btn.small{padding:6px 9px;font-size:12px}.btn:disabled{opacity:.45;cursor:not-allowed}
+  .page{display:none}.page.active{display:block}
+  .grid{display:grid;gap:18px}.grid.two{grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr)}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;min-width:0}.card h3{margin:0 0 6px;font-size:16px}.sub{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px}
+  .drop{border:2px dashed #c8d1e1;border-radius:15px;padding:34px 20px;text-align:center;background:#fafcff;transition:.15s}.drop.drag{border-color:var(--primary);background:var(--primary2)}.drop .big{font-size:42px;line-height:1}.drop h3{margin:9px 0 5px}.drop p{color:var(--muted);font-size:13px;margin:0 0 14px}.fileInput{display:none}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}.chip{background:#eef2f8;border:1px solid #dde4ef;border-radius:999px;padding:5px 9px;font-size:12px}.chip.good{background:#e8f7f1;color:#14704d;border-color:#c8eadc}.chip.warn{background:#fff4e5;color:#8d5600;border-color:#f5d7aa}.chip.bad{background:#ffefed;color:#9f2018;border-color:#f1c7c2}
+  .trialList{display:grid;gap:10px}.trial{display:flex;align-items:center;gap:10px;border:1px solid var(--line);padding:11px;border-radius:11px;background:#fbfcfe}.trial .meta{min-width:0;flex:1}.trial b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.trial span{color:var(--muted);font-size:12px}.trial input{max-width:170px;border:1px solid var(--line);padding:6px 8px;border-radius:7px}
+  .field{display:grid;gap:6px}.field label{font-size:12px;color:#536074;font-weight:700}.field select,.field input{width:100%;border:1px solid var(--line);background:#fff;padding:9px 10px;border-radius:9px;outline:none}.field select:focus,.field input:focus{border-color:#8ca0eb;box-shadow:0 0 0 3px #eef1ff}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.fields.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .geneGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:8px;max-height:250px;overflow:auto;padding:2px}.geneChoice{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:9px;background:#fbfcfe}.geneChoice:hover{border-color:#bbc7d9}.geneChoice input{accent-color:var(--primary)}
+  .tableWrap{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:470px;background:#fff}table{width:100%;border-collapse:collapse;font-size:12px}th{position:sticky;top:0;background:#f0f4f9;color:#45536a;text-align:left;padding:9px;border-bottom:1px solid var(--line);z-index:1;white-space:nowrap}td{padding:8px 9px;border-bottom:1px solid #edf0f5;vertical-align:middle;white-space:nowrap}tr:hover td{background:#fafcff}td input[type="text"],td input[type="number"]{border:1px solid transparent;background:transparent;padding:5px 6px;border-radius:6px;min-width:72px}td input:focus{border-color:#8ca0eb;background:#fff;outline:none}td .editable{border-bottom:1px dashed #a9b4c5}
+  .status{padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700}.status.ok{background:#e7f7f0;color:#15734f}.status.excl{background:#fff0ee;color:#a22b22}
+  .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}.toolbar .spacer{flex:1}.search{border:1px solid var(--line);padding:8px 10px;border-radius:9px;min-width:220px}
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.kpi{background:#fff;border:1px solid var(--line);padding:15px;border-radius:13px}.kpi .v{font-size:25px;font-weight:800}.kpi .l{font-size:12px;color:var(--muted);margin-top:4px}
+  .formula{background:#f5f7fb;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.6;color:#3f4d63}
+  .callout{border-left:4px solid #8ca0eb;background:#f3f5ff;padding:11px 13px;border-radius:8px;font-size:12px;color:#4d5870;line-height:1.5}
+  .chartCard{padding:16px}.canvasWrap{position:relative;height:460px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow-x:auto;overflow-y:hidden}canvas{height:100%;display:block;max-width:none}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#3157d5;margin-right:5px}
+  .statsResult{padding:12px 13px;border:1px solid var(--line);border-radius:11px;background:#fbfcfe;font-size:13px;line-height:1.55}.statsResult strong{font-size:14px}.pSig{color:var(--good);font-weight:800}.pNS{color:#59667b;font-weight:800}
+  .footerNote{color:var(--muted);font-size:11px;margin-top:12px;line-height:1.45}
+  .empty{padding:38px;text-align:center;color:var(--muted)}.empty .big{font-size:38px;margin-bottom:8px}
+  .hidden{display:none!important}.sep{height:1px;background:var(--line);margin:17px 0}.right{text-align:right}.center{text-align:center}
+  .badge{font-size:11px;font-weight:800;background:#edf1ff;color:#4258b5;padding:4px 7px;border-radius:6px}
+  .switch{display:flex;align-items:center;gap:8px;font-size:12px;color:#526075}.switch input{accent-color:var(--primary)}
+  .graphGeneGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:7px;max-height:145px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fbfcfe}.graphGeneChoice{display:flex;align-items:center;gap:7px;font-size:12px;padding:6px 7px;border-radius:7px}.graphGeneChoice:hover{background:#f0f4f9}.graphGeneChoice input{accent-color:var(--primary)}
+  .repSummary{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.repPill{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:4px 8px;background:#fbfcfe;color:#536074}.repPill b{color:var(--text)}
+  @media(max-width:1000px){.app{grid-template-columns:1fr}aside{height:auto;position:static}.nav{grid-template-columns:repeat(4,1fr)}.nav button{text-align:center;font-size:12px}.nav button .n{display:block;margin:0 auto 4px}.sideNote{display:none}.grid.two,.grid.three,.kpis{grid-template-columns:1fr 1fr}main{padding:22px}}
+  @media(max-width:680px){.grid.two,.grid.three,.kpis,.fields,.fields.three{grid-template-columns:1fr}.nav{grid-template-columns:repeat(2,1fr)}main{padding:16px}.topbar{display:block}.actions{margin-top:12px}.canvasWrap{height:360px}}
+</style>
+<link rel="stylesheet" href="studio.css"></head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><div class="logo">◌</div><div><h1>qPCR Studio</h1><small>FROM DISCOVERY TO FIGURE</small></div></div>
+    <div class="nav-label">YOUR EXPERIMENT</div><div class="nav">
+      <button class="active" data-page="import"><span class="n">1</span> Data workspace</button>
+      <button data-page="setup"><span class="n">2</span> Analysis setup</button>
+      <button data-page="results"><span class="n">3</span> Results</button>
+      <button data-page="graphs"><span class="n">4</span> Figure studio</button>
+    </div>
+    <div class="sideNote"><span class="offline-dot"></span> OFFLINE & PRIVATE<br><br><strong>Designed for biological replicates.</strong><br/>Import one or more trial files. Technical replicates are averaged within each trial; trials remain separate for graphing and statistical tests.</div>
+  </aside>
+
+  <main><header class="workspace-bar"><span>WORKSPACE <span class="breadcrumb">/ Untitled experiment</span></span><div><span id="saveStatus">Local workspace</span><button class="btn small" id="globalSave">Save project</button></div></header><div id="staleNotice" class="callout hidden">Your data or analysis settings have changed. Run analysis to update results and graphs.</div>
+    <section id="page-import" class="page active">
+      <div class="topbar"><div><h2>Good science starts here.</h2><p>Bring your raw data into focus. Import, refine, and move from Ct values to your next discovery.</p></div><div class="actions"><button class="btn" id="loadDemo">Load demo</button><button class="btn" id="loadProjectBtn">Open project</button><input id="projectInput" type="file" accept=".json" class="fileInput"></div></div>
+      <div class="welcome-strip"><div><span class="eyebrow">THE COMPLETE qPCR WORKFLOW</span><h3>Less spreadsheet.<br>More science.</h3><p>A thoughtful space for every step of your experiment.</p><button class="btn" id="exploreDemo">Explore an example <span>↗</span></button></div><div class="molecule" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><span>ΔΔCt</span></div><div class="workflow-mini"><span>01 <b>Import & refine</b></span><span>02 <b>Normalize & analyze</b></span><span>03 <b>Make it a figure</b></span></div></div><div class="section-heading"><h3>Your data</h3><span>Excel and CSV · all processed on your device</span></div><div class="grid two">
+        <div class="card">
+          <div id="dropzone" class="drop">
+            <div class="big">⇧</div><h3>Drop qPCR files here</h3><p>.xlsx, .xls, or .csv — select multiple files to append independent trials.</p>
+            <button class="btn primary" id="chooseFiles">Choose files</button><input id="fileInput" class="fileInput" type="file" accept=".xlsx,.xls,.csv" multiple>
+          </div>
+          <div class="footerNote">Excel and CSV import work offline. The app searches each workbook for a sheet containing columns like <b>Sample</b>, <b>Target</b>, and <b>Cq/Ct</b>.</div>
+        </div>
+        <div class="card"><h3>Imported trials</h3><p class="sub">Rename a trial if you want a cleaner biological replicate label.</p><div id="trialList" class="trialList"><div class="empty">No trials imported yet.</div></div></div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="toolbar"><div><h3 style="margin:0">Raw data editor</h3><div class="sub" style="margin:3px 0 0">Edit sample, target, or Cq values; mark questionable wells as excluded.</div></div><div class="spacer"></div><select id="rawSort" class="search" style="min-width:145px"><option value="gene">Organize by gene</option><option value="sample">Organize by sample</option><option value="original">Original order</option></select><input id="rawSearch" class="search" placeholder="Search sample, gene, trial…"><button class="btn small" id="clearExcluded">Include all</button></div>
+        <div id="rawTableWrap" class="tableWrap"><div class="empty"><div class="big">▦</div>Imported rows will appear here.</div></div>
+      </div>
+    </section>
+
+    <section id="page-setup" class="page">
+      <div class="topbar"><div><h2>Choose analysis criteria</h2><p>Select your genes, housekeeping reference, and control/calibrator condition.</p></div><div class="actions"><button class="btn primary" id="runAnalysis">Run analysis</button></div></div>
+      <div class="grid two">
+        <div class="card"><h3>1. Genes of interest</h3><p class="sub">Only selected targets are included in the calculation and graphs.</p><div class="toolbar"><button class="btn small" id="selectAllGenes">Select all</button><button class="btn small" id="clearGenes">Clear</button></div><div id="geneGrid" class="geneGrid"><div class="empty">Import data first.</div></div></div>
+        <div class="card"><h3>2. Normalization & calibrator</h3><p class="sub">These settings follow the ΔΔCt approach used in your workbook.</p><div class="fields">
+          <div class="field"><label>Housekeeping / reference gene</label><select id="refGene"><option value="">Import data first</option></select></div>
+          <div class="field"><label>Control / calibrator condition</label><select id="calibrator"><option value="">Import data first</option></select></div>
+          <div class="field"><label>Amplification efficiency</label><select id="efficiency"><option value="2">100% efficiency (2^-ΔΔCt)</option><option value="custom">Custom base</option></select></div>
+          <div class="field hidden" id="customBaseField"><label>Fold-change base</label><input id="customBase" type="number" min="1.01" step="0.01" value="2"></div>
+        </div>
+        <div class="sep"></div><div class="formula">Reference mean Ct = mean(reference technical replicates)<br>ΔCt = mean(target Ct) − mean(reference Ct)<br>ΔΔCt = ΔCt(condition) − ΔCt(calibrator, same trial)<br>Relative expression = 2<sup>−ΔΔCt</sup><br>log₂FC = log₂(relative expression) = −ΔΔCt</div></div>
+      </div>
+
+      <div class="card" style="margin-top:18px"><h3>3. Sample → condition mapping</h3><p class="sub">The full sample name is used as the condition by default. Edit the condition column when samples contain replicate IDs or extra labels.</p><div id="sampleMapWrap" class="tableWrap"><div class="empty">Import data first.</div></div></div>
+      <div class="callout" style="margin-top:18px"><b>n = number of imported trials.</b> Technical replicate wells are averaged inside each trial. When you append three experiments, the graph shows up to three biological data points per condition and statistical tests operate on those trial-level values.</div>
+    </section>
+
+    <section id="page-results" class="page">
+      <div class="topbar"><div><h2>Calculated results</h2><p>Inspect trial-level Ct means, ΔCt, ΔΔCt, relative expression, and log₂ fold change.</p></div><div class="actions"><button class="btn" id="exportResults">Export results CSV</button><button class="btn" id="saveProject">Save project</button></div></div>
+      <div id="kpis" class="kpis"><div class="kpi"><div class="v">0</div><div class="l">Trials</div></div><div class="kpi"><div class="v">0</div><div class="l">Genes analyzed</div></div><div class="kpi"><div class="v">0</div><div class="l">Conditions</div></div><div class="kpi"><div class="v">0</div><div class="l">Trial-level values</div></div></div>
+      <div class="card" style="margin-top:18px"><div class="toolbar"><div><h3 style="margin:0">Analysis table</h3><div class="sub" style="margin:3px 0 0">A dash means the required reference/calibrator value was unavailable for that trial.</div></div><div class="spacer"></div><select id="resultGeneFilter" class="search" style="min-width:160px"><option value="all">All genes</option></select></div><div id="resultsWrap" class="tableWrap"><div class="empty"><div class="big">∑</div>Run the analysis to populate calculations.</div></div></div>
+    </section>
+
+    <section id="page-graphs" class="page">
+      <div class="topbar"><div><h2>Your data, beautifully expressed.</h2><p>Create a figure, fine-tune every color, and explore your biological replicates.</p></div><div class="actions"><button class="btn" id="downloadPng">Download graph PNG</button></div></div>
+      <div class="grid two">
+        <div class="card">
+          <div class="eyebrow">MAKE IT YOURS</div><h3>Figure settings</h3><div class="style-panel"><div class="field"><label for="palettePreset">Color palette</label><select id="palettePreset"><option value="botanical">Botanical</option><option value="ocean">Ocean</option><option value="accessible">Colorblind friendly</option><option value="custom">Custom</option></select></div><div id="colorSwatches" class="color-swatches"></div><div class="fields"><div class="field"><label for="pointSize">Point size</label><input id="pointSize" type="range" min="2" max="8" value="4.5" step="0.5"></div><div class="field"><label for="barOpacity">Bar opacity</label><input id="barOpacity" type="range" min="0.1" max="1" value="0.7" step="0.05"></div></div><label class="switch"><input id="showGrid" type="checkbox" checked> Show gridlines</label></div><div class="fields three" style="margin-top:12px">
+            <div class="field"><label>View</label><select id="graphMode"><option value="single">Individual gene</option><option value="multi">Multiple genes</option></select></div>
+            <div class="field"><label>Metric</label><select id="graphMetric"><option value="expression">Relative expression (2^-ΔΔCt)</option><option value="log2fc">log₂ fold change</option><option value="dct">ΔCt</option></select></div>
+            <div class="field"><label>Display</label><select id="graphType"><option value="bar">Bar + individual points</option><option value="grouped">Grouped bars by gene</option><option value="points">Individual points only</option><option value="box">Box + points</option><option value="paired">Paired trial lines</option></select></div>
+            <div class="field"><label>Error bars</label><select id="errorType"><option value="sd">SD</option><option value="sem">SEM</option><option value="none">None</option></select></div>
+            <div class="field"><label>Y-axis</label><select id="yScale"><option value="linear">Linear</option><option value="log">Log10</option></select></div>
+            <div class="field"><label>Graph title</label><input id="graphTitle" value="qPCR Relative Expression"></div>
+          </div>
+          <div id="metricNote" class="callout hidden" style="margin-top:12px"></div>
+          <div class="fields three" style="margin-top:12px;align-items:end">
+            <div class="field"><label>Horizontal threshold</label><label class="switch" style="min-height:40px"><input id="showThreshold" type="checkbox" checked> Show dotted threshold line</label></div>
+            <div class="field"><label>Threshold y-value</label><input id="thresholdValue" type="number" step="any" value="1"></div>
+            <div class="field"><label>Threshold label (optional)</label><input id="thresholdLabel" value="Fold-change threshold" placeholder="e.g. Fold-change threshold"></div>
+          </div>
+          <div class="footerNote" style="margin-top:6px">This is a visual fold-change threshold, not a statistical p-value cutoff. Set it to any y-value or turn it off entirely.</div>
+          <div style="margin-top:12px"><div class="field"><label id="graphGeneLabel">Gene to display</label><div id="graphGeneGrid" class="graphGeneGrid"></div></div></div>
+          <div id="replicateSummary" class="repSummary"></div>
+          <div class="sep"></div><div class="fields three">
+            <div class="field"><label>Statistical test gene</label><select id="statGene"></select></div>
+            <div class="field"><label>Statistical test</label><select id="statTest"><option value="paired">Paired t-test (2 conditions)</option><option value="welch">Welch's t-test (2 conditions)</option><option value="anova">One-way ANOVA (2+ conditions)</option></select></div>
+            <div class="field"><label>Compare conditions</label><select id="statPair"><option value="auto">First two available conditions</option></select></div>
+          </div>
+          <div class="toolbar" style="margin-top:12px"><button class="btn primary" id="runStats">Run statistical test</button><label class="switch"><input id="statsUseOverrides" type="checkbox"> Use manual graph overrides</label></div>
+          <div id="statsResult" class="statsResult">Choose a gene and run a test.</div>
+        </div>
+        <div class="card chartCard"><div class="canvasWrap"><canvas id="chart"></canvas></div><div class="legend" id="chartLegend"><span><i class="dot"></i> Each dot = one imported trial / biological replicate</span></div><div class="footerNote">Export your figure as a high-resolution PNG. Colors and figure settings are included when you save a project.</div></div>
+      </div>
+
+      <div class="card" style="margin-top:18px"><div class="toolbar"><div><h3 style="margin:0">Plot value editor</h3><div class="sub" style="margin:3px 0 0">Enter an override to change a point for graphing/stats without changing the raw Ct calculations. Clear the override to revert.</div></div><div class="spacer"></div><button class="btn small" id="clearOverrides">Clear overrides for displayed genes</button></div><div id="plotEditorWrap" class="tableWrap"><div class="empty">Run the analysis first.</div></div></div>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+<div id="toast" role="status" aria-live="polite"></div></body>
+</html>
