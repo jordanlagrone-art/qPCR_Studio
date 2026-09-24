@@ -1,1 +1,1 @@
-module.exports={testDir:'./tests',timeout:45000,workers:1,use:{trace:'retain-on-failure'},reporter:'list'};
+module.exports={testDir:'./tests',timeout:120000,expect:{timeout:20000},workers:1,use:{trace:'retain-on-failure'},reporter:'list'};

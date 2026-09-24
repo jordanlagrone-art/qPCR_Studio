@@ -1,12 +1,14 @@
 {
   "name": "qpcr-studio",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "An offline qPCR analysis and figure studio",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
     "build:source": "node scripts/build-source.cjs",
     "test": "playwright test",
+    "test:python": ".venv\\Scripts\\python.exe -m unittest discover -s python -p test_*.py",
+    "build:python": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onedir --name qpcr-engine --distpath python-dist/v1.1.0 --workpath python-build --specpath python-build --collect-all seaborn --hidden-import matplotlib.backends.backend_svg --hidden-import matplotlib.backends.backend_pdf --exclude-module tkinter --exclude-module IPython python/engine.py",
     "dist": "electron-builder --win portable"
   },
   "keywords": [],
@@ -17,12 +19,20 @@
     "appId": "studio.qpcr.desktop",
     "productName": "qPCR studio",
     "directories": {
-      "output": "dist"
+      "output": "dist/v1.1.0"
     },
     "files": [
       "main.cjs",
+      "preload.cjs",
+      "python-bridge.cjs",
       "src/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "python-dist/v1.1.0/qpcr-engine",
+        "to": "qpcr-engine"
+      }
     ],
     "win": {
       "target": "portable",

@@ -3,3 +3,8 @@ dist/
 test-results/
 playwright-report/
 electron-runtime.zip
+.venv/
+python-dist/
+python-build/
+__pycache__/
+*.spec

@@ -1,0 +1,80 @@
+  let dataRevision=0, analysisJob=null, previewRevision=0, previewTimer=null, previewBusy=false, previewQueued=false;
+  async function pythonRequest(action,payload){
+    if(!window.qpcrPython)throw new Error('Open qPCR studio as a desktop app to use the Python engine.');
+    return window.qpcrPython.request(action,payload);
+  }
+  async function runAnalysis(){
+    if(!state.raw.length){toast('Import qPCR data first.');return false;}
+    if(!state.refGene||!state.calibrator||!state.selectedGenes.size){toast('Choose target genes, a reference, and a calibrator.');return false;}
+    if(analysisJob)return analysisJob;
+    const revision=dataRevision;
+    $('#runAnalysis').disabled=true;$('#runAnalysis').textContent='Analyzing…';
+    const payload={raw:state.raw,trials:state.trials,sampleMap:state.sampleMap,selectedGenes:[...state.selectedGenes],refGene:state.refGene,calibrator:state.calibrator,base:state.base};
+    analysisJob=(async()=>{
+      try{
+        const response=await pythonRequest('analyze',payload);
+        if(revision!==dataRevision){toast('Data changed during analysis. Run analysis again.');return false;}
+        state.results=response.results;state.analysisRun=true;$('#staleNotice').classList.add('hidden');toast('Python analysis complete · '+state.results.length+' trial-level values');return true;
+      }catch(error){toast(error.message);return false;}
+      finally{$('#runAnalysis').disabled=false;$('#runAnalysis').textContent='Run analysis';analysisJob=null;}
+    })();
+    return analysisJob;
+  }
+  function figurePayload(format='png',exporting=false){
+    const metric=$('#graphMetric').value, genes=graphGenes();
+    return {...getFigure(),genes,rows:state.results.filter(r=>genes.includes(r.gene)&&graphRowVisible(r,metric)).map(r=>({...r,value:valueFor(r,metric,true)})),format,export:exporting,width:Math.min(820,Math.max(320,$('#chart').parentElement.clientWidth||720))};
+  }
+  function drawChart(){
+    previewRevision++;clearTimeout(previewTimer);
+    if(!$('#page-graphs').classList.contains('active'))return;
+    if(!state.analysisRun||!graphGenes().length){$('#chart').removeAttribute('src');$('#chart').hidden=true;$('#chartStatus').textContent='Run analysis and select a gene to create a figure.';return;}
+    $('#chartStatus').textContent='Rendering figure…';$('#chart').setAttribute('aria-busy','true');
+    previewTimer=setTimeout(renderPythonPreview,180);
+  }
+  async function renderPythonPreview(){
+    if(previewBusy){previewQueued=true;return;}
+    if(!state.analysisRun||!$('#page-graphs').classList.contains('active'))return;
+    previewBusy=true;previewQueued=false;
+    const revision=previewRevision;
+    try{
+      const payload=figurePayload(),response=await pythonRequest('render',payload);
+      if(revision!==previewRevision)return;
+      const chart=$('#chart');chart.src='data:'+response.mime+';base64,'+response.data;chart.hidden=false;
+      chart.style.width=response.width+'px';chart.dataset.engine=response.engine;chart.dataset.labelAngle=response.labelAngle;
+      $('#chartStatus').textContent=response.omitted?response.omitted+' nonpositive values omitted on log scale.':'Rendered with Matplotlib + Seaborn';
+      $('#chartLegend').textContent='Each point = one biological trial. '+(Object.keys(state.overrides).length?'Manual plot overrides are saved with the project.':'');
+    }catch(error){if(revision===previewRevision){$('#chart').hidden=true;$('#chartStatus').textContent='Could not render figure: '+error.message;}}
+    finally{previewBusy=false;if(revision===previewRevision)$('#chart').setAttribute('aria-busy','false');if(previewQueued||revision!==previewRevision){previewQueued=false;clearTimeout(previewTimer);previewTimer=setTimeout(renderPythonPreview,120);}}
+  }
+  async function exportFigure(format){
+    if(!state.analysisRun||!graphGenes().length){toast('Run analysis and select a gene before exporting.');return;}
+    const revision=previewRevision;
+    const buttons=[$('#downloadPng'),$('#downloadSvg'),$('#downloadPdf')];buttons.forEach(b=>b.disabled=true);
+    try{
+      const response=await pythonRequest('render',figurePayload(format,true));
+      if(revision!==previewRevision){toast('Figure settings changed during export. Please export again.');return;}
+      const a=document.createElement('a');a.download=slug(graphGenes().join('_')||'qpcr')+'_graph.'+format;a.href='data:'+response.mime+';base64,'+response.data;a.click();toast(format.toUpperCase()+' figure exported');
+    }catch(error){toast('Export failed: '+error.message);}
+    finally{buttons.forEach(b=>b.disabled=false);}
+  }
+  async function runStats(){
+    if(!state.analysisRun){toast('Run analysis first.');return;}
+    const gene=$('#statGene').value, metric=$('#graphMetric').value, use=$('#statsUseOverrides').checked;
+    const rows=state.results.filter(r=>r.gene===gene).map(r=>({...r,value:valueFor(r,metric,use)}));
+    const payload={rows,test:$('#statTest').value,pair:$('#statPair').value==='auto'?null:$('#statPair').value.split('|||'),metric,useOverrides:use};
+    const revision=dataRevision,signature=JSON.stringify(payload);$('#runStats').disabled=true;$('#statsResult').textContent='Running SciPy statistical test…';
+    try{
+      const result=await pythonRequest('stats',payload);
+      const current={rows:state.results.filter(r=>r.gene===$('#statGene').value).map(r=>({...r,value:valueFor(r,$('#graphMetric').value,$('#statsUseOverrides').checked)})),test:$('#statTest').value,pair:$('#statPair').value==='auto'?null:$('#statPair').value.split('|||'),metric:$('#graphMetric').value,useOverrides:$('#statsUseOverrides').checked};
+      if(revision!==dataRevision||signature!==JSON.stringify(current)){$('#statsResult').textContent='Settings changed. Run the statistical test again.';return;}
+      $('#statsResult').innerHTML=`<strong>${esc(gene)} · ${esc(result.name)}</strong><br>${esc(result.detail)}<br>p = <span class="${result.p<.05?'pSig':'pNS'}">${result.p<.0001?'&lt; 0.0001':result.p.toFixed(4)}</span><div class="footerNote">SciPy · ${esc(metric)} · ${use?'using plot overrides':'calculated values only'} · no multiple-comparison correction</div>`;
+    }catch(error){$('#statsResult').textContent=error.message;}
+    finally{$('#runStats').disabled=false;}
+  }
+  $('#runStats').onclick=runStats;
+  ['statGene','statTest','statPair','statsUseOverrides','graphMetric'].forEach(id=>$('#'+id).addEventListener('change',()=>{$('#statsResult').textContent='Settings changed. Run a statistical test for this selection.';}));
+  window.addEventListener('resize',drawChart);
+  $('#downloadPng').onclick=()=>exportFigure('png');
+  $('#downloadPng').insertAdjacentHTML('afterend','<button class="btn" id="downloadSvg">Export SVG</button><button class="btn" id="downloadPdf">Export PDF</button>');
+  $('#downloadSvg').onclick=()=>exportFigure('svg');$('#downloadPdf').onclick=()=>exportFigure('pdf');
+  pythonRequest('health',{}).then(()=>{$('#saveStatus').textContent='Python engine ready';}).catch(error=>{$('#saveStatus').textContent='Python unavailable';toast(error.message);});
